@@ -13,6 +13,16 @@ from . import __version__
 from .core import GitTrailError, _git, collect_history, render_html, repository_root
 
 
+def _print_message(message: str, stream=None) -> None:
+    """Do not turn a successful export into an error on legacy Windows pipes."""
+    stream = sys.stdout if stream is None else stream
+    try:
+        print(message, file=stream)
+    except UnicodeEncodeError:
+        encoding = stream.encoding or "utf-8"
+        print(message.encode(encoding, errors="backslashreplace").decode(encoding), file=stream)
+
+
 def _check_output(output: Path, root: Path, force: bool) -> Path:
     output = output.expanduser().absolute()
     if output.is_symlink():
@@ -73,10 +83,10 @@ def main(argv: list[str] | None = None) -> int:
         data = collect_history(root, args.limit)
         _write_output(output, render_html(data), args.force)
     except (GitTrailError, OSError, UnicodeError) as exc:
-        print(f"git-trail: {exc}", file=sys.stderr)
+        _print_message(f"git-trail: {exc}", stream=sys.stderr)
         return 1
     scope = " (history truncated; increase --limit for more)" if data["truncated"] else ""
-    print(f"Exported {len(data['commits'])} commits{scope}: {output}")
+    _print_message(f"Exported {len(data['commits'])} commits{scope}: {output}")
     if args.open:
         try:
             if not webbrowser.open(output.as_uri()):

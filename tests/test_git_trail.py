@@ -210,6 +210,31 @@ class GitTrailTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("An exported commit", output.read_text(encoding="utf-8"))
 
+    def test_cli_exports_unicode_path_with_legacy_stdout_encoding(self):
+        self.commit("Unicode report on a legacy terminal")
+        output = self.root / "时间线报告.html"
+        result = self.cli(
+            self.repo, "-o", output,
+            extra_env={"PYTHONIOENCODING": "cp1252:strict"},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("Exported 1 commits", result.stdout)
+        html = output.read_text(encoding="utf-8")
+        self.assertIn("<!doctype html", html.lower())
+        self.assertIn("Unicode report on a legacy terminal", html)
+
+    def test_cli_reports_unicode_error_path_with_legacy_stderr_encoding(self):
+        output = self.root / "should-not-exist.html"
+        result = self.cli(
+            self.root / "不存在的仓库", "-o", output,
+            extra_env={"PYTHONIOENCODING": "cp1252:strict"},
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("git-trail:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(output.exists())
+
     def test_cli_defaults_to_current_repository_and_output(self):
         self.commit()
         result = self.cli(cwd=self.repo)
