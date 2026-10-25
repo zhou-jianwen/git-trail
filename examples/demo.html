@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="A self-contained, offline view of a Git repository's history.">
+  <title>Git Trail · History explorer</title>
+  <style>
+    :root { --paper:#f8f7f3; --surface:#fffefa; --ink:#242923; --muted:#686e64; --line:#dedfd6; --accent:#b84c27; --accent-soft:#f4e5dc; --green:#425745; --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace; --sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:var(--sans); font-size:14px; line-height:1.5; }
+    button,input,select { font:inherit; }
+    button { cursor:pointer; }
+    button:disabled { cursor:default; }
+    :focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
+    .shell { width:min(1160px,calc(100% - 80px)); margin:auto; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:25px 0; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:11px; font-weight:750; letter-spacing:-.6px; font-size:20px; }
+    .brand-mark { display:grid; place-items:center; width:31px; height:31px; background:var(--ink); border-radius:9px; color:var(--paper); }
+    .offline { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:12px; }
+    .offline::before { content:""; width:6px; height:6px; border-radius:50%; background:#64795c; }
+    .hero { padding:53px 0 36px; display:flex; align-items:flex-end; justify-content:space-between; gap:28px; }
+    .eyebrow { margin:0 0 12px; color:var(--accent); font:11px var(--mono); letter-spacing:1.7px; text-transform:uppercase; }
+    h1 { margin:0; font-size:clamp(30px,4vw,51px); line-height:1.1; letter-spacing:-2px; font-weight:650; overflow-wrap:anywhere; }
+    .intro { margin:15px 0 0; color:var(--muted); font-size:15px; }
+    .branch { display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:7px; padding:7px 12px; background:var(--surface); font:12px var(--mono); max-width:320px; }
+    .branch span { overflow-wrap:anywhere; }
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+    .stat { padding:22px 25px; min-width:0; }
+    .stat+.stat { border-left:1px solid var(--line); }
+    .stat-label { color:var(--muted); font-size:12px; }
+    .stat-value { display:block; font-size:30px; line-height:1.2; margin-top:8px; font-weight:600; letter-spacing:-1px; font-variant-numeric:tabular-nums; }
+    .stat-value.date { font-size:20px; letter-spacing:-.5px; padding-top:7px; }
+    .workspace { display:grid; grid-template-columns:245px minmax(0,1fr); gap:35px; margin-top:35px; align-items:start; }
+    .sidebar { position:sticky; top:22px; }
+    h2 { font-size:14px; margin:0; font-weight:650; letter-spacing:-.15px; }
+    .filter-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+    .text-button { border:0; padding:2px 0; color:var(--accent); background:transparent; font-size:12px; }
+    .text-button:hover { text-decoration:underline; }
+    .field { margin-bottom:17px; }
+    label { display:block; margin-bottom:6px; color:var(--muted); font-size:12px; }
+    input,select { width:100%; min-width:0; padding:10px 11px; border:1px solid var(--line); border-radius:6px; background:var(--surface); color:var(--ink); font-size:13px; }
+    input::placeholder { color:#858b80; }
+    input[type="date"] { min-height:40px; }
+    .date-fields { display:grid; grid-template-columns:1fr; gap:0; }
+    .scope { border-top:1px solid var(--line); margin-top:25px; padding-top:18px; color:var(--muted); font-size:12px; }
+    .scope-label { margin:0 0 7px; color:var(--ink); font:10px var(--mono); text-transform:uppercase; letter-spacing:1px; }
+    .scope p { margin:0 0 9px; }
+    .scope code { font-family:var(--mono); font-size:11px; overflow-wrap:anywhere; }
+    .activity { border:1px solid var(--line); border-radius:9px; background:var(--surface); padding:20px 23px; margin-bottom:30px; }
+    .activity-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+    .subtle { font-size:11px; color:var(--muted); }
+    .heatmap { display:grid; grid-auto-flow:column; grid-template-rows:repeat(7,1fr); grid-template-columns:repeat(12,minmax(0,1fr)); gap:5px; margin-top:18px; }
+    .heat-day { height:10px; border-radius:2px; background:#edeee7; }
+    .heat-day[data-level="1"] { background:#ebc9b7; }
+    .heat-day[data-level="2"] { background:#dca485; }
+    .heat-day[data-level="3"] { background:#c87951; }
+    .heat-day[data-level="4"] { background:#a94c29; }
+    .activity-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; color:var(--muted); font:10px var(--mono); }
+    .legend { display:flex; gap:4px; align-items:center; }
+    .legend i { width:9px; height:9px; border-radius:2px; display:inline-block; }
+    .timeline-heading { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding-bottom:15px; border-bottom:1px solid var(--line); }
+    #result-count { font:11px var(--mono); color:var(--muted); }
+    .month-heading { margin:27px 0 9px; color:var(--muted); font:11px var(--mono); text-transform:uppercase; letter-spacing:1px; }
+    .commit-list { list-style:none; padding:0; margin:0; }
+    .commit { display:grid; grid-template-columns:36px minmax(0,1fr); gap:13px; padding:16px 0; border-bottom:1px solid var(--line); }
+    .avatar { display:grid; place-items:center; height:34px; width:34px; margin-top:1px; border:1px solid #d9dfd3; border-radius:50%; background:#e9eee2; color:var(--green); font-size:12px; font-weight:650; }
+    .commit-subject { margin:0; font-size:14px; font-weight:550; line-height:1.55; overflow-wrap:anywhere; }
+    .commit-meta { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; color:var(--muted); font-size:11px; margin-top:6px; }
+    .author { color:#4b5547; font-weight:550; overflow-wrap:anywhere; }
+    .commit-date { font-size:11px; }
+    .hash-button { margin-left:auto; display:inline-flex; align-items:center; gap:6px; padding:2px 5px; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--muted); font:11px var(--mono); }
+    .hash-button:hover { color:var(--accent); border-color:var(--line); background:var(--surface); }
+    .hash-button svg { opacity:.65; }
+    .refs { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+    .ref { display:inline-block; padding:2px 7px; border:1px solid #ded9cc; border-radius:4px; background:#f2eee4; color:#6c654b; font:10px var(--mono); overflow-wrap:anywhere; max-width:100%; }
+    .merge { font:10px var(--mono); color:var(--accent); }
+    .empty { text-align:center; padding:54px 20px; }
+    .empty-symbol { display:grid; place-items:center; width:42px; height:42px; border:1px solid var(--line); border-radius:50%; margin:0 auto 15px; color:var(--muted); font:20px var(--mono); }
+    .empty h3 { margin:0 0 7px; font-size:16px; font-weight:550; }
+    .empty p { color:var(--muted); margin:0 0 13px; font-size:13px; }
+    .load-more { display:block; margin:25px auto 0; border:1px solid var(--line); border-radius:6px; background:var(--surface); padding:10px 24px; color:var(--ink); font-size:12px; }
+    .load-more:hover { border-color:var(--muted); }
+    .footer { display:flex; justify-content:space-between; gap:15px; margin-top:56px; padding:23px 0 30px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
+    .footer strong { color:var(--ink); font-weight:550; }
+    .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:7px; background:var(--ink); color:var(--surface); box-shadow:0 4px 18px #24292320; font-size:12px; max-width:calc(100% - 32px); z-index:2; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    [hidden] { display:none !important; }
+    noscript { display:block; padding:20px; border:1px solid var(--accent); margin-top:20px; }
+    @media (max-width:800px) {
+      .shell { width:calc(100% - 40px); }
+      .hero { padding-top:35px; align-items:flex-start; flex-direction:column; gap:18px; }
+      .workspace { grid-template-columns:1fr; gap:25px; }
+      .sidebar { position:static; }
+      .filters { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
+      .date-fields { display:contents; }
+      .scope { margin-top:3px; padding-top:14px; }
+      .scope p { display:inline; margin-right:5px; }
+      .scope-label { display:block !important; }
+      .stat { padding:18px; }
+      .stat-value.date { font-size:17px; }
+      .footer { margin-top:36px; }
+    }
+    @media (max-width:480px) {
+      .shell { width:calc(100% - 32px); }
+      .topbar { padding:18px 0; }
+      .offline { font-size:10px; }
+      .hero { padding-bottom:25px; }
+      h1 { letter-spacing:-1.3px; }
+      .intro { font-size:13px; }
+      .stats { grid-template-columns:1fr 1fr; }
+      .stat { padding:16px 18px; }
+      .stat:nth-child(3) { border-left:0; border-top:1px solid var(--line); }
+      .stat:nth-child(4) { border-top:1px solid var(--line); }
+      .stat-value { font-size:27px; }
+      .stat-value.date { font-size:19px; }
+      .filters { grid-template-columns:1fr; }
+      .date-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .activity { padding:17px; }
+      .activity-heading { align-items:flex-start; flex-direction:column; gap:3px; }
+      .heatmap { gap:4px; }
+      .activity-footer { font-size:9px; }
+      .legend { gap:3px; }
+      .commit { grid-template-columns:29px minmax(0,1fr); gap:10px; }
+      .avatar { width:28px; height:28px; font-size:10px; }
+      .hash-button { margin-left:0; }
+      .footer { flex-direction:column; gap:5px; }
+    }
+    @media (prefers-reduced-motion:no-preference) { button,input,select { transition:border-color .12s,color .12s,background-color .12s; } }
+    @media print { .sidebar,.hash-button,.load-more,.offline,.toast { display:none !important; } .shell { width:100%; } .workspace { display:block; } .commit { break-inside:avoid; } .hero { padding-top:25px; } body { background:white; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12m0-6c0-4 8 0 8-6" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="4" r="2" fill="currentColor"/><circle cx="6" cy="16" r="2" fill="currentColor"/><circle cx="14" cy="4" r="2" fill="currentColor"/></svg></span>Git Trail</div>
+      <span class="offline">Offline. On your own terms.</span>
+    </header>
+    <main>
+      <section class="hero" aria-labelledby="repository-name">
+        <div><p class="eyebrow">A project, in motion</p><h1 id="repository-name">Repository history</h1><p class="intro">Small changes. A bigger story. Follow the trail.</p></div>
+        <div class="branch"><svg width="13" height="16" viewBox="0 0 13 16" fill="none" aria-hidden="true"><path d="M3 4v8m0-4c0-4 7 0 7-4" stroke="currentColor" stroke-width="1.2"/><circle cx="3" cy="3" r="2" stroke="currentColor"/><circle cx="3" cy="13" r="2" stroke="currentColor"/><circle cx="10" cy="3" r="2" stroke="currentColor"/></svg><span id="branch-name">—</span></div>
+      </section>
+      <noscript>Git Trail needs JavaScript to display this local report. All code and data are included in this file; no network connection is needed.</noscript>
+      <section class="stats" aria-label="Filtered history summary">
+        <div class="stat"><span class="stat-label">Commits in view</span><strong class="stat-value" id="stat-commits">—</strong></div>
+        <div class="stat"><span class="stat-label">Contributors</span><strong class="stat-value" id="stat-authors">—</strong></div>
+        <div class="stat"><span class="stat-label">Active days</span><strong class="stat-value" id="stat-days">—</strong></div>
+        <div class="stat"><span class="stat-label">Latest commit · UTC</span><strong class="stat-value date" id="stat-latest">—</strong></div>
+      </section>
+      <div class="workspace">
+        <aside class="sidebar" aria-label="History filters">
+          <div class="filter-heading"><h2>Find your bearings</h2><button class="text-button" type="button" id="reset-filters">Reset</button></div>
+          <form class="filters" id="filters" role="search">
+            <div class="field"><label for="search">Search history</label><input id="search" type="search" placeholder="Message, author, or hash…" autocomplete="off"></div>
+            <div class="field"><label for="author">Contributor</label><select id="author"><option value="">Everyone</option></select></div>
+            <div class="date-fields">
+              <div class="field"><label for="from-date">From · UTC</label><input type="date" id="from-date"></div>
+              <div class="field"><label for="to-date">Through · UTC</label><input type="date" id="to-date"></div>
+            </div>
+          </form>
+          <div class="scope"><p class="scope-label">About this snapshot</p><p id="scope-description"></p><p id="scope-limit"></p><p>Dates are shown in UTC. Contributors are grouped by author name.</p><p>HEAD <code id="head-hash">—</code></p></div>
+        </aside>
+        <div>
+          <section class="activity" aria-labelledby="activity-title">
+            <div class="activity-heading"><h2 id="activity-title">12 weeks of activity</h2><span class="subtle" id="activity-caption">Within the exported history</span></div>
+            <div class="heatmap" id="heatmap" role="img" aria-label="Commit activity"></div>
+            <div class="activity-footer"><span id="activity-dates">—</span><span class="legend" aria-hidden="true">Less <i style="background:#edeee7"></i><i style="background:#ebc9b7"></i><i style="background:#dca485"></i><i style="background:#c87951"></i><i style="background:#a94c29"></i> More</span></div>
+            <p class="sr-only" id="activity-description"></p>
+          </section>
+          <section aria-labelledby="timeline-title">
+            <div class="timeline-heading"><div><h2 id="timeline-title">The trail</h2><span class="subtle">By author date · UTC</span></div><span id="result-count" role="status" aria-live="polite"></span></div>
+            <div id="timeline"></div>
+            <div class="empty" id="empty-state" hidden><div class="empty-symbol" aria-hidden="true">⌁</div><h3 id="empty-title">No commits on this trail</h3><p id="empty-description">Try a different search or a wider date range.</p><button type="button" class="text-button" id="empty-reset">Clear filters</button></div>
+            <button type="button" class="load-more" id="load-more" hidden>Show more commits</button>
+          </section>
+        </div>
+      </div>
+    </main>
+    <footer class="footer"><span><strong>Git Trail</strong> · One file. A little perspective.</span><span id="generated-at"></span></footer>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script type="application/json" id="trail-data">{"schemaVersion":1,"repository":{"name":"fieldnotes (fictional demo)","branch":"main","head":"dab660488f62d5a6a0d20925cd24d49e30a76d39"},"generatedAt":"2026-10-25T12:00:00+00:00","limit":500,"truncated":false,"commits":[{"hash":"dab660488f62d5a6a0d20925cd24d49e30a76d39","shortHash":"dab6604","parents":["b1fec5847bded4f78fb98e4f9d11c451ecaf109f"],"author":"Mira Chen","date":"2026-10-25T12:00:00+00:00","subject":"Ship the autumn field guide","refs":["main","tag: v0.3.0"]},{"hash":"b1fec5847bded4f78fb98e4f9d11c451ecaf109f","shortHash":"b1fec58","parents":["87b222724a6faf12a46f059d586ec2cf2fec7158"],"author":"Sam Rivera","date":"2026-10-23T12:00:00+00:00","subject":"Make keyboard navigation feel natural","refs":[]},{"hash":"87b222724a6faf12a46f059d586ec2cf2fec7158","shortHash":"87b2227","parents":["92894f3aafe51eed2d56ba9691ac2e799bb4051c"],"author":"Kai Ito","date":"2026-10-21T12:00:00+00:00","subject":"Remember the last reading position","refs":[]},{"hash":"92894f3aafe51eed2d56ba9691ac2e799bb4051c","shortHash":"92894f3","parents":["802058e92048ef2a83e6f192a2d8e60a92e38987"],"author":"Mira Chen","date":"2026-10-19T12:00:00+00:00","subject":"Add a quiet mode for focused writing","refs":[]},{"hash":"802058e92048ef2a83e6f192a2d8e60a92e38987","shortHash":"802058e","parents":["e610bfbaed338fc295d91b15b275a0229ed90019"],"author":"Sam Rivera","date":"2026-10-16T12:00:00+00:00","subject":"Fix date filters across time zones","refs":[]},{"hash":"e610bfbaed338fc295d91b15b275a0229ed90019","shortHash":"e610bfb","parents":["78c25552edd656833a7cc18171e31787f00e73db"],"author":"Kai Ito","date":"2026-10-14T12:00:00+00:00","subject":"Bring small-screen layouts into focus","refs":[]},{"hash":"78c25552edd656833a7cc18171e31787f00e73db","shortHash":"78c2555","parents":["a6db97e31dd8c834b2be466850b283c262346a0c","04b5afd8996f4061012fe14f50a49eb42432cc2b"],"author":"Mira Chen","date":"2026-10-12T12:00:00+00:00","subject":"Merge the notebook search improvements","refs":[]},{"hash":"a6db97e31dd8c834b2be466850b283c262346a0c","shortHash":"a6db97e","parents":["04b5afd8996f4061012fe14f50a49eb42432cc2b"],"author":"Sam Rivera","date":"2026-10-10T12:00:00+00:00","subject":"Search notes by title and tag","refs":[]},{"hash":"04b5afd8996f4061012fe14f50a49eb42432cc2b","shortHash":"04b5afd","parents":["64e36024112ab89fd41b3d1eaa76965c0583d58a"],"author":"Kai Ito","date":"2026-10-07T12:00:00+00:00","subject":"Keep exported notes readable offline","refs":[]},{"hash":"64e36024112ab89fd41b3d1eaa76965c0583d58a","shortHash":"64e3602","parents":["cd322aff9ffd932ef7873b520e0898ae4909fa99"],"author":"Mira Chen","date":"2026-10-05T12:00:00+00:00","subject":"Translate the welcome screen: \u4f60\u597d\uff0c\u4e16\u754c","refs":[]},{"hash":"cd322aff9ffd932ef7873b520e0898ae4909fa99","shortHash":"cd322af","parents":["078694d841277590d09aaa2ca23c244cf7c20704"],"author":"Sam Rivera","date":"2026-10-03T12:00:00+00:00","subject":"Show a helpful empty state for new notebooks","refs":[]},{"hash":"078694d841277590d09aaa2ca23c244cf7c20704","shortHash":"078694d","parents":["0bed9b5b9e880e81c69aaf9cef74f2c667daf2c3"],"author":"Kai Ito","date":"2026-10-01T12:00:00+00:00","subject":"Add a print-friendly reading view","refs":[]},{"hash":"0bed9b5b9e880e81c69aaf9cef74f2c667daf2c3","shortHash":"0bed9b5","parents":["54f3cf196d78b3e7e654a68b280990d5deda281b"],"author":"Mira Chen","date":"2026-09-28T12:00:00+00:00","subject":"Give every notebook a little more breathing room","refs":[]},{"hash":"54f3cf196d78b3e7e654a68b280990d5deda281b","shortHash":"54f3cf1","parents":["b883b3cb147866262e4636107a1ec9247e217572"],"author":"Sam Rivera","date":"2026-09-26T12:00:00+00:00","subject":"Fix long titles wrapping on mobile","refs":[]},{"hash":"b883b3cb147866262e4636107a1ec9247e217572","shortHash":"b883b3c","parents":["1d92e9ca7ca6a01914a547aa2f68eaa0706db9a2"],"author":"Kai Ito","date":"2026-09-24T12:00:00+00:00","subject":"Introduce notebook collections","refs":["tag: v0.2.0"]},{"hash":"1d92e9ca7ca6a01914a547aa2f68eaa0706db9a2","shortHash":"1d92e9c","parents":["96968e6c1d8507ebcc8917d1312007be3eb66a64"],"author":"Mira Chen","date":"2026-09-22T12:00:00+00:00","subject":"Keep draft notes safe during navigation","refs":[]},{"hash":"96968e6c1d8507ebcc8917d1312007be3eb66a64","shortHash":"96968e6","parents":["827ef86809b5be08f432bf7a34552b284934673c"],"author":"Sam Rivera","date":"2026-09-19T12:00:00+00:00","subject":"Improve contrast for quiet interface text","refs":[]},{"hash":"827ef86809b5be08f432bf7a34552b284934673c","shortHash":"827ef86","parents":["42c20c0da195d8fe214ac49d51abaf182a9c8273"],"author":"Kai Ito","date":"2026-09-17T12:00:00+00:00","subject":"Document the plain-text export format","refs":[]},{"hash":"42c20c0da195d8fe214ac49d51abaf182a9c8273","shortHash":"42c20c0","parents":["ef1e14acdf53862027bd567554718d585d8d0e5a"],"author":"Mira Chen","date":"2026-09-15T12:00:00+00:00","subject":"Add a quick switcher for recent notebooks","refs":[]},{"hash":"ef1e14acdf53862027bd567554718d585d8d0e5a","shortHash":"ef1e14a","parents":["c0255849c92e9157b2472adf06c6a3f39247cf4b"],"author":"Sam Rivera","date":"2026-09-13T12:00:00+00:00","subject":"Make search work with accented characters","refs":[]},{"hash":"c0255849c92e9157b2472adf06c6a3f39247cf4b","shortHash":"c025584","parents":["c0e9845468af404273149a5ef9092d7b63db0692"],"author":"Kai Ito","date":"2026-09-10T12:00:00+00:00","subject":"Render code examples without syntax surprises","refs":[]},{"hash":"c0e9845468af404273149a5ef9092d7b63db0692","shortHash":"c0e9845","parents":["5dcf6479f4865724f9709afeee6466fb2b6b0a98"],"author":"Mira Chen","date":"2026-09-08T12:00:00+00:00","subject":"Add links between related field notes","refs":[]},{"hash":"5dcf6479f4865724f9709afeee6466fb2b6b0a98","shortHash":"5dcf647","parents":["b483b0438579f279f0ffd89d0b2325711f363a3e"],"author":"Sam Rivera","date":"2026-09-06T12:00:00+00:00","subject":"Support drag-and-drop note ordering","refs":[]},{"hash":"b483b0438579f279f0ffd89d0b2325711f363a3e","shortHash":"b483b04","parents":["b17f33995d432170f6c1fd436a7d3c4c513313a7"],"author":"Kai Ito","date":"2026-09-04T12:00:00+00:00","subject":"Keep dates consistent in exported files","refs":[]},{"hash":"b17f33995d432170f6c1fd436a7d3c4c513313a7","shortHash":"b17f339","parents":["72a2b488ea5b1d1d138bd125d28cbb824d11ff1c"],"author":"Mira Chen","date":"2026-09-01T12:00:00+00:00","subject":"Add integration coverage for notebook imports","refs":[]},{"hash":"72a2b488ea5b1d1d138bd125d28cbb824d11ff1c","shortHash":"72a2b48","parents":["73ca24b4efda4135dc98d374ef73a7294fa2296c"],"author":"Sam Rivera","date":"2026-08-30T12:00:00+00:00","subject":"Restore focus after closing a dialog","refs":[]},{"hash":"73ca24b4efda4135dc98d374ef73a7294fa2296c","shortHash":"73ca24b","parents":["9b7ee9b69112de04de2844eee48292f1242b9de4"],"author":"Kai Ito","date":"2026-08-28T12:00:00+00:00","subject":"Create a simple getting-started notebook","refs":[]},{"hash":"9b7ee9b69112de04de2844eee48292f1242b9de4","shortHash":"9b7ee9b","parents":["50ad52916d4f73d6c9d40687be296c791b488c18"],"author":"Mira Chen","date":"2026-08-26T12:00:00+00:00","subject":"Add author names to shared exports","refs":[]},{"hash":"50ad52916d4f73d6c9d40687be296c791b488c18","shortHash":"50ad529","parents":["f6154046b96d40266dd10cc1e3613c394c4efe61"],"author":"Sam Rivera","date":"2026-08-23T12:00:00+00:00","subject":"Make empty searches return all notes","refs":[]},{"hash":"f6154046b96d40266dd10cc1e3613c394c4efe61","shortHash":"f615404","parents":["ab192904e4f0cf1a2e43b8c9972d85c5466b2561"],"author":"Kai Ito","date":"2026-08-21T12:00:00+00:00","subject":"Test notes containing \u003cscript\u003e as plain text","refs":[]},{"hash":"ab192904e4f0cf1a2e43b8c9972d85c5466b2561","shortHash":"ab19290","parents":["8d0177b246300b995e942d766f669dfe0b62176c"],"author":"Mira Chen","date":"2026-08-19T12:00:00+00:00","subject":"Support multiline notebook descriptions","refs":[]},{"hash":"8d0177b246300b995e942d766f669dfe0b62176c","shortHash":"8d0177b","parents":["71cd02702712c4898210c7d12b6cb04425c35bdc"],"author":"Sam Rivera","date":"2026-08-17T12:00:00+00:00","subject":"Choose warmer colors for long reading sessions","refs":[]},{"hash":"71cd02702712c4898210c7d12b6cb04425c35bdc","shortHash":"71cd027","parents":["c23636647dbff01a2930142e23bb2d8f1fbd2630"],"author":"Kai Ito","date":"2026-08-14T12:00:00+00:00","subject":"Add the first local notebook store","refs":[]},{"hash":"c23636647dbff01a2930142e23bb2d8f1fbd2630","shortHash":"c236366","parents":["bb3308f07e2b81d481d0754ad552bc5892cf0749"],"author":"Mira Chen","date":"2026-08-12T12:00:00+00:00","subject":"Sketch the two-column workspace","refs":[]},{"hash":"bb3308f07e2b81d481d0754ad552bc5892cf0749","shortHash":"bb3308f","parents":["a08f1a7bebd4fe40b3e235888a26916276ab67ab"],"author":"Sam Rivera","date":"2026-08-10T12:00:00+00:00","subject":"Write down the small, offline-first scope","refs":[]},{"hash":"a08f1a7bebd4fe40b3e235888a26916276ab67ab","shortHash":"a08f1a7","parents":[],"author":"Kai Ito","date":"2026-08-08T12:00:00+00:00","subject":"Plant the first seed","refs":[]}]}</script>
+  <script>
+    (() => {
+      'use strict';
+      const data = JSON.parse(document.getElementById('trail-data').textContent);
+      const byId = id => document.getElementById(id);
+      const text = (id, value) => { byId(id).textContent = value; };
+      const dayKey = value => {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+      };
+      const formatDate = (key, options) => key ? new Date(key + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone:'UTC', ...options }) : '—';
+      const monthName = key => formatDate(key, { year:'numeric', month:'long' });
+      const shortDate = key => formatDate(key, { month:'short', day:'numeric', year:'numeric' });
+      const number = value => value.toLocaleString('en-US');
+      // Git's topology order can revisit older months; the visual trail follows
+      // author timestamps. Stable sorting retains Git's order for equal dates.
+      const commits = data.commits
+        .map(commit => ({ ...commit, day:dayKey(commit.date) }))
+        .sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));
+      const newestDay = commits.reduce((latest, commit) => commit.day > latest ? commit.day : latest, '');
+      let filtered = commits;
+      let visibleLimit = 80;
+      let toastTimer;
+
+      function element(tag, className, value) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (value !== undefined) node.textContent = value;
+        return node;
+      }
+
+      function toast(message) {
+        text('toast', message);
+        byId('toast').hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { byId('toast').hidden = true; }, 2200);
+      }
+
+      async function copyHash(hash) {
+        try {
+          if (!navigator.clipboard || !window.isSecureContext) throw new Error('Clipboard unavailable');
+          await navigator.clipboard.writeText(hash);
+          toast('Commit hash copied');
+        } catch (_) {
+          const input = element('textarea', 'sr-only', hash);
+          input.setAttribute('readonly', '');
+          const focused = document.activeElement;
+          document.body.append(input);
+          input.select();
+          let copied = false;
+          try { copied = document.execCommand('copy'); } catch (_) { /* Manual copy below. */ }
+          input.remove();
+          if (focused) focused.focus();
+          if (copied) toast('Commit hash copied');
+          else window.prompt('Copy this commit hash:', hash);
+        }
+      }
+
+      function renderActivity() {
+        const heatmap = byId('heatmap');
+        heatmap.replaceChildren();
+        if (!newestDay) {
+          heatmap.setAttribute('aria-label', 'No dated commits in this export.');
+          text('activity-dates', 'No activity to display');
+          text('activity-caption', 'No dated commits');
+          text('activity-description', 'No dated commits in this export.');
+          return;
+        }
+        const end = new Date(newestDay + 'T12:00:00Z');
+        const start = new Date(end);
+        start.setUTCDate(start.getUTCDate() - 83);
+        const startKey = dayKey(start);
+        const counts = new Map();
+        for (const commit of filtered) {
+          if (commit.day >= startKey && commit.day <= newestDay) counts.set(commit.day, (counts.get(commit.day) || 0) + 1);
+        }
+        const max = Math.max(1, ...counts.values());
+        let total = 0;
+        const descriptions = [];
+        for (let offset = 0; offset < 84; offset++) {
+          const date = new Date(start);
+          date.setUTCDate(start.getUTCDate() + offset);
+          const key = dayKey(date);
+          const count = counts.get(key) || 0;
+          const cell = element('span', 'heat-day');
+          cell.dataset.level = count === 0 ? '0' : String(Math.max(1, Math.ceil(count / max * 4)));
+          cell.title = shortDate(key) + ': ' + number(count) + (count === 1 ? ' commit' : ' commits');
+          cell.setAttribute('aria-hidden', 'true');
+          heatmap.append(cell);
+          if (count) descriptions.push(cell.title);
+          total += count;
+        }
+        text('activity-caption', number(total) + ' matching commits · ending at latest export date');
+        text('activity-dates', shortDate(startKey) + ' — ' + shortDate(newestDay));
+        const summary = number(total) + ' matching commits from ' + shortDate(startKey) + ' through ' + shortDate(newestDay) + '. ';
+        heatmap.setAttribute('aria-label', summary);
+        heatmap.setAttribute('aria-describedby', 'activity-description');
+        text('activity-description', descriptions.length ? descriptions.join('. ') + '. Other days have zero matching commits.' : 'All days have zero matching commits.');
+      }
+
+      function renderCommit(commit) {
+        const row = element('li', 'commit');
+        const initials = (commit.author || '?').trim().split(/\s+/).map(part => Array.from(part)[0]).slice(0, 2).join('').toUpperCase();
+        const avatar = element('span', 'avatar', initials || '?');
+        avatar.setAttribute('aria-hidden', 'true');
+        const content = element('div');
+        content.append(element('h3', 'commit-subject', commit.subject || '(no commit message)'));
+        const meta = element('div', 'commit-meta');
+        meta.append(element('span', 'author', commit.author || 'Unknown author'));
+        const date = element('time', 'commit-date', shortDate(commit.day));
+        date.dateTime = commit.date;
+        date.title = commit.date;
+        meta.append(date);
+        if (commit.parents.length > 1) meta.append(element('span', 'merge', 'merge'));
+        const copy = element('button', 'hash-button', commit.shortHash + ' ⧉');
+        copy.type = 'button';
+        copy.title = 'Copy full commit hash';
+        copy.setAttribute('aria-label', 'Copy commit hash ' + commit.shortHash);
+        copy.addEventListener('click', () => copyHash(commit.hash));
+        meta.append(copy);
+        content.append(meta);
+        if (commit.refs.length) {
+          const refs = element('div', 'refs');
+          for (const ref of commit.refs) refs.append(element('span', 'ref', ref));
+          content.append(refs);
+        }
+        row.append(avatar, content);
+        return row;
+      }
+
+      function renderTimeline() {
+        const timeline = byId('timeline');
+        timeline.replaceChildren();
+        const visible = filtered.slice(0, visibleLimit);
+        let currentMonth;
+        let list;
+        for (const commit of visible) {
+          const month = commit.day.slice(0, 7) || 'undated';
+          if (month !== currentMonth) {
+            const heading = element('h3', 'month-heading', commit.day ? monthName(commit.day) : 'Unknown date');
+            list = element('ol', 'commit-list');
+            list.setAttribute('aria-label', heading.textContent + ' commits');
+            timeline.append(heading, list);
+            currentMonth = month;
+          }
+          list.append(renderCommit(commit));
+        }
+        byId('empty-state').hidden = filtered.length !== 0;
+        byId('empty-reset').hidden = commits.length === 0;
+        text('empty-title', commits.length ? 'No commits on this trail' : 'Your trail starts here');
+        text('empty-description', commits.length ? 'Try a different search or a wider date range.' : 'This snapshot contains no commits. Make a commit, then export a new trail.');
+        const remaining = filtered.length - visible.length;
+        byId('load-more').hidden = remaining <= 0;
+        text('load-more', 'Show ' + number(Math.min(80, remaining)) + ' more commits');
+        text('result-count', number(visible.length) + ' shown / ' + number(filtered.length) + ' matching');
+      }
+
+      function applyFilters() {
+        const query = byId('search').value.trim().toLocaleLowerCase();
+        const author = byId('author').value;
+        const from = byId('from-date').value;
+        const through = byId('to-date').value;
+        filtered = commits.filter(commit => {
+          if (author && commit.author !== author) return false;
+          if (from && (!commit.day || commit.day < from)) return false;
+          if (through && (!commit.day || commit.day > through)) return false;
+          return !query || [commit.subject, commit.author, commit.hash].some(value => value.toLocaleLowerCase().includes(query));
+        });
+        visibleLimit = 80;
+        text('stat-commits', number(filtered.length));
+        text('stat-authors', number(new Set(filtered.map(commit => commit.author)).size));
+        text('stat-days', number(new Set(filtered.map(commit => commit.day).filter(Boolean)).size));
+        const latest = filtered.reduce((day, commit) => commit.day > day ? commit.day : day, '');
+        text('stat-latest', shortDate(latest));
+        renderActivity();
+        renderTimeline();
+      }
+
+      function resetFilters() {
+        byId('filters').reset();
+        applyFilters();
+      }
+
+      text('repository-name', data.repository.name);
+      document.title = data.repository.name + ' · Git Trail';
+      text('branch-name', data.repository.branch || 'Detached HEAD');
+      text('head-hash', data.repository.head ? data.repository.head.slice(0, 12) : 'No commits');
+      text('scope-description', number(commits.length) + ' exported commits reachable from HEAD.');
+      text('scope-limit', data.truncated ? 'Export capped at ' + number(data.limit) + ' commits. Earlier history is not included.' : 'All commits reachable from this HEAD are included.');
+      text('generated-at', 'Snapshot created ' + shortDate(dayKey(data.generatedAt)) + ' · UTC');
+      const authors = [...new Set(commits.map(commit => commit.author))].sort((a, b) => a.localeCompare(b));
+      for (const author of authors) {
+        const option = element('option', '', author || 'Unknown author');
+        option.value = author;
+        byId('author').append(option);
+      }
+      byId('filters').addEventListener('submit', event => event.preventDefault());
+      byId('search').addEventListener('input', applyFilters);
+      for (const id of ['author', 'from-date', 'to-date']) byId(id).addEventListener('change', applyFilters);
+      byId('reset-filters').addEventListener('click', resetFilters);
+      byId('empty-reset').addEventListener('click', resetFilters);
+      byId('load-more').addEventListener('click', () => { visibleLimit += 80; renderTimeline(); });
+      applyFilters();
+    })();
+  </script>
+</body>
+</html>

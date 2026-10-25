@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "git-trail"
+version = "0.1.0"
+description = "Turn local Git history into a self-contained, offline interactive timeline."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Git Trail contributors"}]
+keywords = ["git", "timeline", "offline", "visualization"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.scripts]
+git-trail = "git_trail.cli:main"
+
+[project.urls]
+Repository = "https://github.com/zhou-jianwen/git-trail"
+Issues = "https://github.com/zhou-jianwen/git-trail/issues"
+
+[tool.setuptools]
+packages = ["git_trail"]
+
+[tool.setuptools.package-data]
+git_trail = ["template.html"]
